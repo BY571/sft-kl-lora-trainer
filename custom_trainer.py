@@ -44,6 +44,10 @@ class CustomSFTTrainer_w_kl(SFTTrainer):
 
         # If the model is not a PEFT model, we can't compute KL loss, so we return SFT loss
         if not hasattr(model, 'disable_adapter'):
+            warnings.warn(
+                "The model provided does not appear to be a PEFT model with a LoRA adapter. "
+                "The KL divergence loss term will not be calculated and the trainer will fall back to standard SFT."
+            )
             return (sft_loss, outputs) if return_outputs else sft_loss
 
         # Get the logits from the adapter-enabled model
@@ -66,25 +70,21 @@ class CustomSFTTrainer_w_kl(SFTTrainer):
         # Create a mask for the answer tokens (non -100 labels)
         answer_mask = (shift_labels != -100).float()
 
-        # Calculate log probabilities from the model's logits
+        # Calculate log probabilities from the adapter model and reference model logits
         log_probs = torch.nn.functional.log_softmax(shift_logits, dim=-1)
-
-        # Calculate log probabilities from the reference model's logits
         ref_log_probs = torch.nn.functional.log_softmax(shift_ref_logits, dim=-1)
 
         # Calculate KL divergence: KL(P_ref || P_model) = sum(P_ref * (log P_ref - log P_model))
         kl_divergence = torch.exp(ref_log_probs) * (ref_log_probs - log_probs)
 
-        # Sum over the vocabulary dimension and apply the mask
+        # Sum over the vocabulary dimension and apply the mask and average over the sequence and batch
         kl_loss_per_token = (kl_divergence.sum(dim=-1) * answer_mask)
-
-        # Average over the sequence and batch
         kl_loss = kl_loss_per_token.sum() / answer_mask.sum()
 
-        # Combine SFT loss and KL loss
+        # Combine losses
         loss = sft_loss + self.kl_alpha * kl_loss
 
-        # Log the KL loss
+        # Logging
         self._metrics["train"]["kl_loss"].append(kl_loss.item())
 
         return (loss, outputs) if return_outputs else loss
