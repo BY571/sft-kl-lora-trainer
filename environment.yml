@@ -1,0 +1,20 @@
+name: custom_sft_loss
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pytorch
+  - torchvision
+  - torchaudio
+  - cudatoolkit=12.1  # Change to match your GPU driver, or remove for CPU
+  - pip:
+      - transformers
+      - datasets
+      - peft
+      - accelerate
+      - wandb
+      - trl
